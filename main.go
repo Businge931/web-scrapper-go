@@ -28,23 +28,23 @@ func main() {
 	}
 	defer file.Close()
 
-	for _, companyName := range companyNames {
+	for i := range companyNames {
 		companyURL, err := scraper.GetSearchResults(
 			client,
-			companyName)
+			companyNames[i])
 		if err != nil {
-			log.Printf("Error getting search results for %s: %v", companyName, err)
-			output[companyName] = ""
+			log.Printf("Error getting search results for %s: %v", companyNames[i], err)
+			output[companyNames[i]] = ""
 			continue
 		}
-		output[companyName] = companyURL
+		output[companyNames[i]] = companyURL
 
-		email, err := scraper.GetCompanyEmail(companyURL, companyName)
+		email, err := scraper.GetCompanyEmail(companyURL, companyNames[i])
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 		}
 
-		scraper.WriteEmailsToFile(file, companyName, email)
+		scraper.WriteEmailsToFile(file, companyNames[i], email)
 
 	}
 
