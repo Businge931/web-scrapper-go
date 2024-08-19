@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/Businge931/company-email-scraper/scraper"
 )
@@ -21,7 +20,7 @@ func main() {
 	client := &http.Client{}
 
 	// Create the output file once
-	fileName := fmt.Sprintf("company_emails_%d.txt", time.Now().Unix())
+	fileName := "output/company_emails.txt"
 	file, err := os.Create(fileName)
 	if err != nil {
 		log.Fatalf("Failed to create output file: %v", err)
