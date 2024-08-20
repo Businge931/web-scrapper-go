@@ -81,41 +81,79 @@ func TestReadCompanyNames(t *testing.T) {
 	}
 }
 
-
 func TestGetSearchResults(t *testing.T) {
-	// Mock response data
-	mockResponse := SerpAPIResponse{
-		Organic: []struct {
-			Link string `json:"link"`
-		}{
-			{Link: "https://google.serper.dev/search"},
+	tests := map[string]struct {
+		companyName   string
+		mockResponse  SerpAPIResponse
+		expectedURL   string
+		expectedError bool
+	}{
+		"ValidResponse": {
+			companyName: "stanbic bank",
+			mockResponse: SerpAPIResponse{
+				Organic: []struct {
+					Link string `json:"link"`
+				}{
+					{Link: "https://www.stanbicbank.co.ug/uganda/personal"},
+				},
+			},
+			expectedURL:   "https://www.stanbicbank.co.ug/uganda/personal",
+			expectedError: false,
+		},
+		"NoResultsFound": {
+			companyName: "unknown company",
+			mockResponse: SerpAPIResponse{
+				Organic: []struct {
+					Link string `json:"link"`
+				}{},
+			},
+			expectedURL:   "",
+			expectedError: true,
+		},
+		"APIError": {
+			companyName:   "error company",
+			mockResponse:  SerpAPIResponse{},
+			expectedURL:   "",
+			expectedError: true,
 		},
 	}
 
-	// Create a mock server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Encode the mock response as JSON and write it to the response writer
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
-	}))
-	defer server.Close()
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Create a mock server
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if name == "APIError" {
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return
+				}
+				// Encode the mock response as JSON and write it to the response writer
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(tt.mockResponse)
+			}))
+			defer server.Close()
 
-	// Create an http.Client that directs requests to the mock server
-	client := server.Client()
+			// Create an http.Client that directs requests to the mock server
+			client := server.Client()
 
-	// Call the function under test with the mock client
-	companyName := "stanbic bank"
-	result, err := GetSearchResults(client, companyName)
-	if err != nil {
-		t.Fatalf("GetSearchResults returned an error: %v", err)
-	}
+			// Call the function under test with the mock client
+			result, err := GetSearchResults(client, tt.companyName)
 
-	// Expected URL from the mock response
-	expectedURL := "https://www.stanbicbank.co.ug/uganda/personal"
+			if tt.expectedError {
+				if err == nil {
+					t.Fatalf("Expected an error but got none")
+				}
+				return
+			} else {
+				if err != nil {
+					t.Fatalf("Did not expect an error but got: %v", err)
+				}
+			}
 
-	// Check if the result matches the expected URL
-	if result != expectedURL {
-		t.Errorf("Expected %s, but got %s", expectedURL, result)
+			// Check if the result matches the expected URL
+			if result != tt.expectedURL {
+				t.Errorf("Expected %s, but got %s", tt.expectedURL, result)
+			}
+		})
 	}
 }
 
@@ -189,7 +227,6 @@ func TestGetCompanyEmail(t *testing.T) {
 		})
 	}
 }
-
 
 func TestWriteEmailsToFile(t *testing.T) {
 	tests := []struct {
