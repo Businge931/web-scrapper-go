@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
+	// "reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestReadCompanyNames(t *testing.T) {
@@ -74,9 +76,12 @@ func TestReadCompanyNames(t *testing.T) {
 			}
 
 			// Compare the actual output with the expected output
-			if !reflect.DeepEqual(actualNames, tt.companyNames) {
-				t.Errorf("Expected %v, but got %v", tt.companyNames, actualNames)
-			}
+			if diff := cmp.Diff(actualNames, tt.companyNames); diff != "" {
+        t.Errorf("Mismatch (-want +got):\n%s", diff)
+    }
+			// if !reflect.DeepEqual(actualNames, tt.companyNames) {
+			// 	t.Errorf("Expected %v, but got %v", tt.companyNames, actualNames)
+			// }
 		})
 	}
 }
