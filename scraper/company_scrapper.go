@@ -10,7 +10,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Businge931/company-email-scraper/config"
 	"github.com/google/go-querystring/query"
+	"github.com/spf13/viper"
 )
 
 // SerpAPI response struct visit: https://serper.dev/playground
@@ -42,10 +44,13 @@ func ReadCompanyNames(filepath string) ([]string, error) {
 
 func GetSearchResults(client *http.Client, companyName string) (string, error) {
 
-	os.Setenv("SERPAPI_KEY", "0eb5aec35da6593d1993b1573558d3b5f8b0a37c")
-	apiKey := os.Getenv("SERPAPI_KEY")
+	if err := config.InitConfig(); err != nil {
+		return "", fmt.Errorf("error initializing configuration: %w", err)
+	}
+
+	apiKey := viper.GetString("serpapi.api_key")
 	if apiKey == "" {
-		return "", fmt.Errorf("SERPAPI_KEY not set")
+		return "", fmt.Errorf("SERPAPI_KEY not set in config or environment")
 	}
 
 	baseURL := "https://google.serper.dev/search"
