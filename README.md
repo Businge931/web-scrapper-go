@@ -2,6 +2,11 @@
 
 This Go program reads a list of company names from a text file, performs a Google search, identifies the company's About page, scrapes the email address from the "About" page, and writes the company name and email address to an output file.
 
+The output file is a .txt and its content will have the structure below:
+ company_name : email
+ company_name_2 : email_2
+
+
 ## Features
 - Google Search integration (mocked for simplicity)
 - Facebook About page email scraping
