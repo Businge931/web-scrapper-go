@@ -11,42 +11,76 @@ import (
 )
 
 func TestReadCompanyNames(t *testing.T) {
-	// Prepare a temporary directory and file for testing
-	tempDir := "companies-list"
-	tempFile := tempDir + "/input.txt"
-	expectedNames := []string{"stanbic bank", "Pearl Technologies", "clinicpesa"}
-
-	// Ensure the directory exists
-	if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
+	tests := map[string]struct {
+		companyNames []string
+		expectError  bool
+	}{
+		"ValidCompanyNames": {
+			companyNames: []string{"stanbic bank", "Pearl Technologies", "clinicpesa"},
+			expectError:  false,
+		},
+		"EmptyFile": {
+			companyNames: []string{},
+			expectError:  false,
+		},
+		"FileNotFound": {
+			expectError: true,
+		},
 	}
 
-	// Create the input file with expected company names
-	file, err := os.Create(tempFile)
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.RemoveAll(tempDir) // Clean up the temp directory after the test
-	defer file.Close()
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Prepare a temporary directory and file for testing, except for the "FileNotFound" case
+			var tempFile string
+			if name != "FileNotFound" {
+				tempDir := "companies-list"
+				tempFile = tempDir + "/input.txt"
 
-	// Write the expected company names to the file
-	for _, name := range expectedNames {
-		if _, err := file.WriteString(name + "\n"); err != nil {
-			t.Fatalf("Failed to write to temp file: %v", err)
-		}
-	}
+				if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
+					t.Fatalf("Failed to create temp directory: %v", err)
+				}
+				defer os.RemoveAll(tempDir) // Clean up the temp directory after the test
 
-	// Call the function under test
-	actualNames, err := ReadCompanyNames(tempFile)
-	if err != nil {
-		t.Fatalf("ReadCompanyNames returned an error: %v", err)
-	}
+				file, err := os.Create(tempFile)
+				if err != nil {
+					t.Fatalf("Failed to create temp file: %v", err)
+				}
+				defer file.Close()
 
-	// Compare the actual output with the expected output
-	if !reflect.DeepEqual(actualNames, expectedNames) {
-		t.Errorf("Expected %v, but got %v", expectedNames, actualNames)
+				// Write the company names to the file
+				for _, name := range tt.companyNames {
+					if _, err := file.WriteString(name + "\n"); err != nil {
+						t.Fatalf("Failed to write to temp file: %v", err)
+					}
+				}
+			} else {
+				// Set a non-existing file path for "FileNotFound" case
+				tempFile = "non-existing-file.txt"
+			}
+
+			// Call the function under test
+			actualNames, err := ReadCompanyNames(tempFile)
+
+			// Check for expected error
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("Expected an error, but got nil")
+				}
+				return
+			} else {
+				if err != nil {
+					t.Fatalf("Did not expect an error, but got: %v", err)
+				}
+			}
+
+			// Compare the actual output with the expected output
+			if !reflect.DeepEqual(actualNames, tt.companyNames) {
+				t.Errorf("Expected %v, but got %v", tt.companyNames, actualNames)
+			}
+		})
 	}
 }
+
 
 func TestGetSearchResults(t *testing.T) {
 	// Mock response data
