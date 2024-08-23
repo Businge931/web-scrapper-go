@@ -1,14 +1,16 @@
 package scraper
 
 import (
-	// "encoding/json"
-	// "fmt"
-	// "net/http"
-	// "net/http/httptest"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
-
 	"testing"
-	
+
+	"github.com/Businge931/company-email-scraper/config"
+	"github.com/google/go-querystring/query"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestReadCompanyNames(t *testing.T) {
@@ -88,204 +90,245 @@ func TestReadCompanyNames(t *testing.T) {
 	}
 }
 
-// func TestGetSearchResults(t *testing.T) {
-// 	tests := map[string]struct {
-// 		companyName   string
-// 		mockResponse  SerpAPIResponse
-// 		expectedURL   string
-// 		expectedError bool
-// 	}{
-// 		"ValidResponse": {
-// 			companyName: "stanbic bank",
-// 			mockResponse: SerpAPIResponse{
-// 				Organic: []struct {
-// 					Link string `json:"link"`
-// 				}{
-// 					{Link: "https://www.stanbicbank.co.ug/uganda/personal"},
-// 				},
-// 			},
-// 			expectedURL:   "https://www.stanbicbank.co.ug/uganda/personal",
-// 			expectedError: false,
-// 		},
-// 		"NoResultsFound": {
-// 			companyName: "unknown company",
-// 			mockResponse: SerpAPIResponse{
-// 				Organic: []struct {
-// 					Link string `json:"link"`
-// 				}{},
-// 			},
-// 			expectedURL:   "",
-// 			expectedError: true,
-// 		},
-// 		"APIError": {
-// 			companyName:   "error company",
-// 			mockResponse:  SerpAPIResponse{},
-// 			expectedURL:   "",
-// 			expectedError: true,
-// 		},
-// 	}
+func TestGetSearchResults(t *testing.T) {
+	tests := map[string]struct {
+		companyName   string
+		apiKey        string
+		mockServer    *httptest.Server
+		expectedError string
+		expectedURL   string
+	}{
+		"Successful search with valid API key and company name": {
+			companyName: "testCompany",
+			apiKey:      "validApiKey",
+			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(SerpAPIResponse{
+					Organic: []struct {
+						Link string `json:"link"`
+					}{
+						{Link: "https://example.com"},
+					},
+				})
+			})),
+			expectedError: "",
+			expectedURL:   "https://example.com",
+		},
+		"Failure due to missing or invalid API key": {
+			companyName:   "testCompany",
+			apiKey:        "",
+			mockServer:    nil,
+			expectedError: "SERPAPI_KEY not set in config or environment",
+		},
+		"Failure due to the search API returning an error status": {
+			companyName: "testCompany",
+			apiKey:      "validApiKey",
+			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			})),
+			expectedError: "received non-OK HTTP status: 500 Internal Server Error",
+		},
+		"Failure when no results are found for the given company name": {
+			companyName: "testCompany",
+			apiKey:      "validApiKey",
+			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(SerpAPIResponse{
+					Organic: []struct {
+						Link string `json:"link"`
+					}{},
+				})
+			})),
+			expectedError: "no results found for testCompany",
+		},
+		"Failure due to JSON decoding issues": {
+			companyName: "testCompany",
+			apiKey:      "validApiKey",
+			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("invalid JSON"))
+			})),
+			expectedError: "failed to decode SerpAPI response: ",
+		},
+		"Failure due to issues with the InitConfig function": {
+			companyName:   "testCompany",
+			apiKey:        "validApiKey",
+			mockServer:    nil,
+			expectedError: "error initializing configuration: ",
+		},
+	}
 
-// 	for name, tt := range tests {
-// 		t.Run(name, func(t *testing.T) {
-// 			// Create a mock server
-// 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 				if name == "APIError" {
-// 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-// 					return
-// 				}
-// 				// Encode the mock response as JSON and write it to the response writer
-// 				w.Header().Set("Content-Type", "application/json")
-// 				json.NewEncoder(w).Encode(tt.mockResponse)
-// 			}))
-// 			defer server.Close()
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Set up environment variable
+			cleanup := config.SetupConfigFile(t, tc.apiKey)
+			defer cleanup()
 
-// 			// Create an http.Client that directs requests to the mock server
-// 			client := server.Client()
+			 err := config.InitConfig()
+            if err != nil {
+                t.Fatalf("error initializing config: %v", err)
+            }
 
-// 			// Call the function under test with the mock client
-// 			result, err := GetSearchResults(client, tt.companyName)
+			if tc.mockServer != nil {
+				defer tc.mockServer.Close()
+				baseURL := tc.mockServer.URL
+				params := struct {
+					Query  string `url:"q"`
+					APIKey string `url:"api_key"`
+					Num    int    `url:"num"`
+					Engine string `url:"engine"`
+				}{
+					Query:  tc.companyName,
+					APIKey: tc.apiKey,
+					Num:    1,
+					Engine: "google",
+				}
+				queryParams, _ := query.Values(params)
+				searchURL := fmt.Sprintf("%s?%s", baseURL, queryParams.Encode())
 
-// 			if tt.expectedError {
-// 				if err == nil {
-// 					t.Fatalf("Expected an error but got none")
-// 				}
-// 				return
-// 			} else {
-// 				if err != nil {
-// 					t.Fatalf("Did not expect an error but got: %v", err)
-// 				}
-// 			}
+				client := tc.mockServer.Client()
+				url, err := GetSearchResults(client, searchURL)
+				if tc.expectedError != "" {
+					assert.Error(t, err)
+					assert.Contains(t, err.Error(), tc.expectedError)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tc.expectedURL, url)
+				}
+			} else {
+				client := &http.Client{}
+				url, err := GetSearchResults(client, tc.companyName)
+				if tc.expectedError != "" {
+					assert.Error(t, err)
+					assert.Contains(t, err.Error(), tc.expectedError)
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, tc.expectedURL, url)
+				}
+			}
+		})
+	}
+}
 
-// 			// Check if the result matches the expected URL
-// 			if result != tt.expectedURL {
-// 				t.Errorf("Expected %s, but got %s", tt.expectedURL, result)
-// 			}
-// 		})
-// 	}
-// }
+func TestGetCompanyEmail(t *testing.T) {
+	tests := map[string]struct {
+		companyURL   string
+		companyName  string
+		mockResponse string
+		statusCode   int
+		wantEmail    string
+		expectError  bool
+	}{
+		"Valid email found": {
+			companyURL:   "/test-company",
+			companyName:  "Test Company",
+			mockResponse: `<html><body>Contact us at test@example.com</body></html>`,
+			statusCode:   http.StatusOK,
+			wantEmail:    "test@example.com",
+			expectError:  false,
+		},
+		"No email found": {
+			companyURL:   "/no-email-company",
+			companyName:  "No Email Company",
+			mockResponse: `<html><body>No contact information available</body></html>`,
+			statusCode:   http.StatusOK,
+			wantEmail:    "",
+			expectError:  true,
+		},
+		"Facebook URL skipped": {
+			companyURL:   "https://www.facebook.com/test-company",
+			companyName:  "Test Company",
+			mockResponse: "",
+			statusCode:   http.StatusOK,
+			wantEmail:    "",
+			expectError:  true,
+		},
+		"Non-OK status": {
+			companyURL:   "/server-error",
+			companyName:  "Server Error Company",
+			mockResponse: "",
+			statusCode:   http.StatusInternalServerError,
+			wantEmail:    "",
+			expectError:  true,
+		},
+	}
 
-// func TestGetCompanyEmail(t *testing.T) {
-// 	tests := []struct {
-// 		name         string
-// 		companyURL   string
-// 		companyName  string
-// 		mockResponse string
-// 		statusCode   int
-// 		wantEmail    string
-// 		expectError  bool
-// 	}{
-// 		{
-// 			name:         "Valid email found",
-// 			companyURL:   "/test-company",
-// 			companyName:  "Test Company",
-// 			mockResponse: `<html><body>Contact us at test@example.com</body></html>`,
-// 			statusCode:   http.StatusOK,
-// 			wantEmail:    "test@example.com",
-// 			expectError:  false,
-// 		},
-// 		{
-// 			name:         "No email found",
-// 			companyURL:   "/no-email-company",
-// 			companyName:  "No Email Company",
-// 			mockResponse: `<html><body>No contact information available</body></html>`,
-// 			statusCode:   http.StatusOK,
-// 			wantEmail:    "",
-// 			expectError:  true,
-// 		},
-// 		{
-// 			name:         "Facebook URL skipped",
-// 			companyURL:   "https://www.facebook.com/test-company",
-// 			companyName:  "Test Company",
-// 			mockResponse: "",
-// 			statusCode:   http.StatusOK,
-// 			wantEmail:    "",
-// 			expectError:  true,
-// 		},
-// 		{
-// 			name:         "Non-OK status",
-// 			companyURL:   "/server-error",
-// 			companyName:  "Server Error Company",
-// 			mockResponse: "",
-// 			statusCode:   http.StatusInternalServerError,
-// 			wantEmail:    "",
-// 			expectError:  true,
-// 		},
-// 	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Create a mock server
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.statusCode)
+				w.Write([]byte(tc.mockResponse))
+			}))
+			defer server.Close()
 
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			// Create a mock server
-// 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 				w.WriteHeader(tt.statusCode)
-// 				w.Write([]byte(tt.mockResponse))
-// 			}))
-// 			defer server.Close()
+			// Use the mock server's URL for the test
+			companyURL := server.URL + tc.companyURL
 
-// 			// Use the mock server's URL for the test
-// 			companyURL := server.URL + tt.companyURL
+			email, err := GetCompanyEmail(companyURL, tc.companyName)
+			if (err != nil) != tc.expectError {
+				t.Fatalf("expected error: %v, got: %v", tc.expectError, err)
+			}
+			if email != tc.wantEmail {
+				t.Errorf("expected email: %s, got: %s", tc.wantEmail, email)
+			}
+		})
+	}
+}
 
-// 			email, err := GetCompanyEmail(companyURL, tt.companyName)
-// 			if (err != nil) != tt.expectError {
-// 				t.Fatalf("expected error: %v, got: %v", tt.expectError, err)
-// 			}
-// 			if email != tt.wantEmail {
-// 				t.Errorf("expected email: %s, got: %s", tt.wantEmail, email)
-// 			}
-// 		})
-// 	}
-// }
 
-// func TestWriteEmailsToFile(t *testing.T) {
-// 	tests := []struct {
-// 		companyName string
-// 		email       string
-// 		wantOutput  string
-// 	}{
-// 		{
-// 			companyName: "Test Company",
-// 			email:       "test@example.com",
-// 			wantOutput:  "Test Company : test@example.com\n",
-// 		},
-// 		{
-// 			companyName: "Another Company",
-// 			email:       "another@example.com",
-// 			wantOutput:  "Another Company : another@example.com\n",
-// 		},
-// 		{
-// 			companyName: "Empty Email",
-// 			email:       "",
-// 			wantOutput:  "Empty Email : \n",
-// 		},
-// 	}
+func TestWriteEmailsToFile(t *testing.T) {
+	tests := map[string]struct {
+		companyName string
+		email       string
+		wantOutput  string
+	}{
+		"Test Company": {
+			companyName: "Test Company",
+			email:       "test@example.com",
+			wantOutput:  "Test Company : test@example.com\n",
+		},
+		"Another Company": {
+			companyName: "Another Company",
+			email:       "another@example.com",
+			wantOutput:  "Another Company : another@example.com\n",
+		},
+		"Empty Email": {
+			companyName: "Empty Email",
+			email:       "",
+			wantOutput:  "Empty Email : \n",
+		},
+	}
 
-// 	for _, tt := range tests {
-// 		t.Run(fmt.Sprintf("Writing %s", tt.companyName), func(t *testing.T) {
-// 			// Create a temporary file
-// 			tmpFile, err := os.CreateTemp("", "test_emails_*.txt")
-// 			if err != nil {
-// 				t.Fatalf("failed to create temp file: %v", err)
-// 			}
-// 			defer os.Remove(tmpFile.Name())
+	for name, tc := range tests {
+		t.Run(fmt.Sprintf("Writing %s", name), func(t *testing.T) {
+			// Create a temporary file
+			tmpFile, err := os.CreateTemp("", "test_emails_*.txt")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
 
-// 			// Call WriteEmailsToFile
-// 			err = WriteEmailsToFile(tmpFile, tt.companyName, tt.email)
-// 			if err != nil {
-// 				t.Fatalf("WriteEmailsToFile() error = %v", err)
-// 			}
+			// Call WriteEmailsToFile
+			err = WriteEmailsToFile(tmpFile, tc.companyName, tc.email)
+			if err != nil {
+				t.Fatalf("WriteEmailsToFile() error = %v", err)
+			}
 
-// 			// Close the file to flush the write
-// 			tmpFile.Close()
+			// Close the file to flush the write
+			tmpFile.Close()
 
-// 			// Read the content of the file
-// 			content, err := os.ReadFile(tmpFile.Name())
-// 			if err != nil {
-// 				t.Fatalf("failed to read temp file: %v", err)
-// 			}
+			// Read the content of the file
+			content, err := os.ReadFile(tmpFile.Name())
+			if err != nil {
+				t.Fatalf("failed to read temp file: %v", err)
+			}
 
-// 			// Check if the content matches the expected output
-// 			if string(content) != tt.wantOutput {
-// 				t.Errorf("expected %q, got %q", tt.wantOutput, string(content))
-// 			}
-// 		})
-// 	}
-// }
+			// Check if the content matches the expected output
+			if string(content) != tc.wantOutput {
+				t.Errorf("expected %q, got %q", tc.wantOutput, string(content))
+			}
+		})
+	}
+}
+
