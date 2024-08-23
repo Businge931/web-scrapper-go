@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"testing"
 
 	"github.com/spf13/viper"
 )
@@ -13,6 +15,8 @@ func InitConfig() error {
 	viper.AutomaticEnv()
 
 	viper.SetDefault("serpapi.api_key", "")
+	viper.BindEnv("serpapi.api_key", "SERPAPI_KEY")
+
 
 	if err := viper.ReadInConfig(); err != nil {
 		// Handle the error if config file is not found
@@ -24,4 +28,26 @@ func InitConfig() error {
 	}
 
 	return nil
+}
+
+func SetupConfigFile(t *testing.T, apiKey string) func() {
+	tmpfile, err := os.CreateTemp("", "config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	configContent := []byte("serpapi:\n  api_key: " + apiKey)
+	if _, err := tmpfile.Write(configContent); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	viper.SetConfigFile(tmpfile.Name())
+
+	return func() {
+		os.Remove(tmpfile.Name()) // clean up
+	}
 }
