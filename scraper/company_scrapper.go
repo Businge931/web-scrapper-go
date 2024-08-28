@@ -10,9 +10,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Businge931/company-email-scraper/config"
 	"github.com/google/go-querystring/query"
 	"github.com/spf13/viper"
+
+	"github.com/Businge931/company-email-scraper/config"
 )
 
 // SerpAPI response struct visit: https://serper.dev/playground
@@ -43,7 +44,6 @@ func ReadCompanyNames(filepath string) ([]string, error) {
 }
 
 func GetSearchResults(client *http.Client, companyName string) (string, error) {
-
 	if err := config.InitConfig(); err != nil {
 		return "", fmt.Errorf("error initializing configuration: %w", err)
 	}
@@ -98,7 +98,7 @@ func GetSearchResults(client *http.Client, companyName string) (string, error) {
 }
 
 func GetCompanyEmail(companyURL, companyName string) (string, error) {
-	//skip Facebook URLs
+	// skip Facebook URLs
 	if strings.Contains(companyURL, "facebook.com") {
 		return "", fmt.Errorf("skipping Facebook URL: %s", companyURL)
 	}

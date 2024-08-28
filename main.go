@@ -44,7 +44,5 @@ func main() {
 		}
 
 		scraper.WriteEmailsToFile(file, companyNames[i], email)
-
 	}
-
 }

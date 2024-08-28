@@ -24,10 +24,10 @@ The output file is a .txt and its content will have the structure below:
 
 2. Install dependencies:
     ```bash
-    go mod tidy
+    make deps
     ```
 
 ## Running the Program
 
 ```bash
-go run main.go
+make run

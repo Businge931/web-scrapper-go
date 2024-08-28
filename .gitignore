@@ -1,7 +1,5 @@
 .env
-
+/bin/*
 companies-list/*
-
 output/*
-
 config.yaml

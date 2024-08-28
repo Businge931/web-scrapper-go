@@ -1,0 +1,140 @@
+linters:
+  enable-all: true
+  disable:
+    # could be omitted
+    - containedctx # Containedctx is a linter that detects struct contained context.Context field. --Lacks flexibility.
+    - exhaustruct # Checks if all structure fields are initialized. --Excessive.
+    - gochecknoglobals # Check that no global variables exist. --Excessive.
+    - godox # Detects "TODO/BUG/FIXME" --Excessive.
+    - interfacer
+    - copyloopvar
+    - godot
+    - gomnd
+    - mnd
+    - depguard
+    - paralleltest
+    - thelper
+    - testpackage
+    - wrapcheck
+
+linters-settings:
+  cyclop:
+    max-complexity: 15
+    skip-tests: true
+  errorlint:
+    errorf: true
+    asserts: false
+    comparison: true
+  exhaustive:
+    check-generated: false
+    default-signifies-exhaustive: true
+    package-scope-only: false
+  gofmt:
+    simplify: false
+    rewrite-rules:
+      - pattern: 'a[b:len(a)]'
+        replacement: 'a[b:]'
+  gofumpt:
+    module-path: github.com/Businge931/company-email-scraper
+    extra-rules: true
+  gci:
+    sections:
+      - standard
+      - default
+      - localmodule
+#    skip-generated: false
+    custom-order: true
+  gocyclo:
+    min-complexity: 15
+  goimports:
+    local-prefixes: github.com/Businge931/company-email-scraper
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+    settings:
+      shadow:
+        strict: false
+  ireturn:
+    allow:
+      - anon
+      - error
+      - empty
+      - stdlib
+      - (or|er|Client)$
+  lll:
+    line-length: 140
+  nlreturn:
+    block-size: 13
+  misspell:
+    locale: US
+  perfsprint:
+    strconcat: false
+  tagliatelle:
+    case:
+      use-field-name: true
+      rules:
+        json: snake
+        validation: snake
+  varnamelen:
+    max-distance: 10
+    min-name-length: 2
+    check-receiver: true
+    check-return: true
+    check-type-param: true
+    ignore-type-assert-ok: true
+    ignore-map-index-ok: true
+    ignore-chan-recv-ok: true
+    ignore-names:
+      - err
+      - db
+      - tt
+    ignore-decls:
+      - c echo.Context
+      - t testing.T
+      - f *foo.Bar
+      - e error
+      - g *errgroup.Group
+      - i int
+      - const C
+      - T any
+      - m map[string]int
+      - w http.ResponseWriter
+      - r *http.Request
+      - f *fields
+      - f fields
+  tagalign:
+    align: true
+    sort: false
+  testifylint:
+    enable-all: true
+    disable:
+      - require-error
+  wrapcheck:
+    ignorePackageGlobs:
+      - encoding/*
+      - github.com/pkg/*
+      - google.golang.org/grpc/internal/*
+    ignoreInterfaceRegexps:
+      - grpc.Service
+  wsl:
+    allow-assign-and-anything: true
+    allow-assign-and-call: true
+    allow-cuddle-declarations: true
+    allow-multiline-assign: true
+    allow-separated-leading-comment: false
+    allow-trailing-comment: false
+    force-case-trailing-whitespace: 0
+    force-err-cuddling: true
+    force-short-decl-cuddling: false
+    strict-append: true
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - funlen
+        - goconst
+        - lll
+        - perfsprint

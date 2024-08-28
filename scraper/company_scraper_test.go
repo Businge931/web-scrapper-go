@@ -8,9 +8,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Businge931/company-email-scraper/config"
 	"github.com/google/go-querystring/query"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/Businge931/company-email-scraper/config"
 )
 
 func TestReadCompanyNames(t *testing.T) {
@@ -164,10 +165,10 @@ func TestGetSearchResults(t *testing.T) {
 			cleanup := config.SetupConfigFile(t, tc.apiKey)
 			defer cleanup()
 
-			 err := config.InitConfig()
-            if err != nil {
-                t.Fatalf("error initializing config: %v", err)
-            }
+			err := config.InitConfig()
+			if err != nil {
+				t.Fatalf("error initializing config: %v", err)
+			}
 
 			if tc.mockServer != nil {
 				defer tc.mockServer.Close()
@@ -276,7 +277,6 @@ func TestGetCompanyEmail(t *testing.T) {
 	}
 }
 
-
 func TestWriteEmailsToFile(t *testing.T) {
 	tests := map[string]struct {
 		companyName string
@@ -331,4 +331,3 @@ func TestWriteEmailsToFile(t *testing.T) {
 		})
 	}
 }
-
