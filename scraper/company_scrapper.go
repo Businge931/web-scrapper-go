@@ -2,13 +2,17 @@ package scraper
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/go-querystring/query"
 	"github.com/spf13/viper"
@@ -23,6 +27,24 @@ type SerpAPIResponse struct {
 	} `json:"organic"`
 }
 
+var (
+	// static error variables for GetSearchResults
+	ErrInitConfig     = errors.New("error initializing configuration")
+	ErrAPIKeyNotSet   = errors.New("SERPAPI_KEY not set in config or environment")
+	ErrRequestFailed  = errors.New("failed to make request to SerpAPI")
+	ErrDecodeFailed   = errors.New("failed to decode SerpAPI response")
+	ErrNoResultsFound = errors.New("no results found")
+
+	// static error variables for GetCompanyEmail
+	ErrSkippingFacebookURL = errors.New("skipping Facebook URL")
+	ErrFetchFailed         = errors.New("failed to fetch the page")
+	ErrNonOKStatus         = errors.New("received non-OK HTTP status")
+	ErrReadFailed          = errors.New("failed to read response body")
+	ErrNoEmailFound        = errors.New("no email found on the page")
+	ErrInvalidCompanyURL   = errors.New("invalid company URL")
+	ErrWriteFileFailed     = errors.New("failed to write to file")
+)
+
 func ReadCompanyNames(filepath string) ([]string, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -32,6 +54,7 @@ func ReadCompanyNames(filepath string) ([]string, error) {
 
 	var companyNames []string
 	scanner := bufio.NewScanner(file)
+
 	for scanner.Scan() {
 		companyNames = append(companyNames, scanner.Text())
 	}
@@ -45,14 +68,44 @@ func ReadCompanyNames(filepath string) ([]string, error) {
 
 func GetSearchResults(client *http.Client, companyName string) (string, error) {
 	if err := config.InitConfig(); err != nil {
-		return "", fmt.Errorf("error initializing configuration: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrInitConfig, err)
 	}
 
+	apiKey, err := getAPIKey()
+	if err != nil {
+		return "", err
+	}
+
+	searchURL, err := buildSearchURL(companyName, apiKey)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := makeHTTPRequest(client, searchURL)
+	if err != nil {
+		return "", err
+	}
+
+	defer resp.Body.Close()
+
+	serpResponse, err := decodeResponse(resp)
+	if err != nil {
+		return "", err
+	}
+
+	return extractFirstResultURL(serpResponse, companyName)
+}
+
+func getAPIKey() (string, error) {
 	apiKey := viper.GetString("serpapi.api_key")
 	if apiKey == "" {
-		return "", fmt.Errorf("SERPAPI_KEY not set in config or environment")
+		return "", ErrAPIKeyNotSet
 	}
 
+	return apiKey, nil
+}
+
+func buildSearchURL(companyName, apiKey string) (string, error) {
 	baseURL := "https://google.serper.dev/search"
 	params := struct {
 		Query  string `url:"q"`
@@ -62,62 +115,96 @@ func GetSearchResults(client *http.Client, companyName string) (string, error) {
 	}{
 		Query:  companyName,
 		APIKey: apiKey,
-		Num:    1, // Fetch only the first result
+		Num:    1,
 		Engine: "google",
 	}
 
-	// Encode the query parameters
-	queryParams, _ := query.Values(params)
-	searchURL := fmt.Sprintf("%s?%s", baseURL, queryParams.Encode())
-
-	// Make the HTTP request to SerpAPI
-	resp, err := client.Get(searchURL)
+	queryParams, err := query.Values(params)
 	if err != nil {
-		return "", fmt.Errorf("failed to make request to SerpAPI: %w", err)
+		return "", fmt.Errorf("failed to encode query parameters: %w", err)
 	}
-	defer resp.Body.Close()
+
+	return fmt.Sprintf("%s?%s", baseURL, queryParams.Encode()), nil
+}
+
+func makeHTTPRequest(client *http.Client, url string) (*http.Response, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRequestFailed, err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRequestFailed, err)
+	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("received non-OK HTTP status: %s", resp.Status)
+		return nil, fmt.Errorf("%w: %s", ErrNonOKStatus, resp.Status)
 	}
 
-	// Decode the JSON response
+	return resp, nil
+}
+
+func decodeResponse(resp *http.Response) (SerpAPIResponse, error) {
 	var serpResponse SerpAPIResponse
-	err = json.NewDecoder(resp.Body).Decode(&serpResponse)
+	
+	err := json.NewDecoder(resp.Body).Decode(&serpResponse)
 	if err != nil {
-		return "", fmt.Errorf("failed to decode SerpAPI response: %w", err)
+		return serpResponse, fmt.Errorf("%w: %w", ErrDecodeFailed, err)
 	}
 
-	// Ensure that we have at least one result
+	return serpResponse, nil
+}
+
+func extractFirstResultURL(serpResponse SerpAPIResponse, companyName string) (string, error) {
 	if len(serpResponse.Organic) == 0 {
-		return "", fmt.Errorf("no results found for %s", companyName)
+		return "", fmt.Errorf("%w: %s", ErrNoResultsFound, companyName)
 	}
 
-	// Return the first result URL
 	return serpResponse.Organic[0].Link, nil
 }
 
 func GetCompanyEmail(companyURL, companyName string) (string, error) {
 	// skip Facebook URLs
 	if strings.Contains(companyURL, "facebook.com") {
-		return "", fmt.Errorf("skipping Facebook URL: %s", companyURL)
+		return "", fmt.Errorf("%w: %s", ErrSkippingFacebookURL, companyURL)
 	}
 
-	resp, err := http.Get(companyURL)
+	// Validate the URL
+	parsedURL, err := url.ParseRequestURI(companyURL)
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return "", fmt.Errorf("%w: %s", ErrInvalidCompanyURL, companyURL)
+	}
+
+	// Create a context with a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create a new HTTP request with context
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, companyURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch the page: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrFetchFailed, err)
+	}
+
+	// Make the HTTP request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrFetchFailed, err)
 	}
 	defer resp.Body.Close()
 
 	// Check for non-OK status
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("received non-OK HTTP status: %s", resp.Status)
+		return "", fmt.Errorf("%w: %s", ErrNonOKStatus, resp.Status)
 	}
 
 	// Read the body of the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrReadFailed, err)
 	}
 
 	// Convert the body to a string for easier searching
@@ -129,7 +216,7 @@ func GetCompanyEmail(companyURL, companyName string) (string, error) {
 
 	// If no emails are found, return an error
 	if len(emails) == 0 {
-		return "", fmt.Errorf("no email found on the page: %s", companyName)
+		return "", fmt.Errorf("%w: %s", ErrNoEmailFound, companyName)
 	}
 
 	// Return the first email found
@@ -139,7 +226,8 @@ func GetCompanyEmail(companyURL, companyName string) (string, error) {
 func WriteEmailsToFile(file *os.File, companyName, email string) error {
 	_, err := file.WriteString(fmt.Sprintf("%s : %s\n", companyName, email))
 	if err != nil {
-		return fmt.Errorf("failed to write to file: %w", err)
+		return fmt.Errorf("%w: %w", ErrWriteFileFailed, err)
 	}
+
 	return nil
 }
