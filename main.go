@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
 	"os"
+	"net/http"
 
 	"github.com/Businge931/company-email-scraper/scraper"
 )
@@ -21,6 +20,7 @@ func main() {
 
 	// Create the output file once
 	fileName := "output/company_emails.txt"
+
 	file, err := os.Create(fileName)
 	if err != nil {
 		log.Fatalf("Failed to create output file: %v", err)
@@ -30,19 +30,27 @@ func main() {
 	for i := range companyNames {
 		companyURL, err := scraper.GetSearchResults(
 			client,
-			companyNames[i])
+			companyNames[i],
+		)
 		if err != nil {
 			log.Printf("Error getting search results for %s: %v", companyNames[i], err)
 			output[companyNames[i]] = ""
+
 			continue
 		}
+
 		output[companyNames[i]] = companyURL
 
 		email, err := scraper.GetCompanyEmail(companyURL, companyNames[i])
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			log.Printf("Error fetching company email for %s: %v", companyNames[i], err)
+			continue
 		}
 
-		scraper.WriteEmailsToFile(file, companyNames[i], email)
+		err = scraper.WriteEmailsToFile(file, companyNames[i], email)
+		if err != nil {
+			log.Printf("Error writing to file for %s: %v", companyNames[i], err)
+			continue
+		}
 	}
 }
