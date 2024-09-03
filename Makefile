@@ -14,6 +14,7 @@ run: build ## Build and run program
 	$(GOBIN)/$(APP)
 
 lint: install-golangci ## Linter for developers
+	@echo "Running lint..."
 	$(LINT_PATH)/golangci-lint run --timeout=5m -c .golangci.yml
 
 lint-fix:
@@ -21,3 +22,4 @@ lint-fix:
 
 install-golangci: ## Install the correct version of lint
     GOBIN=$(LINT_PATH) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.58.1
+	
