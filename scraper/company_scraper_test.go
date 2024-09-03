@@ -8,10 +8,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Businge931/company-email-scraper/config"
 	"github.com/google/go-querystring/query"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/Businge931/company-email-scraper/config"
 )
 
 func TestReadCompanyNames(t *testing.T) {
@@ -36,6 +35,7 @@ func TestReadCompanyNames(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			// Prepare a temporary directory and file for testing, except for the "FileNotFound" case
 			var tempFile string
+
 			if name != "FileNotFound" {
 				tempDir := "companies-list"
 				tempFile = tempDir + "/input.txt"
@@ -70,6 +70,7 @@ func TestReadCompanyNames(t *testing.T) {
 				if err == nil {
 					t.Fatalf("Expected an error, but got nil")
 				}
+				
 				return
 			} else {
 				if err != nil {
@@ -188,6 +189,7 @@ func TestGetSearchResults(t *testing.T) {
 				searchURL := fmt.Sprintf("%s?%s", baseURL, queryParams.Encode())
 
 				client := tc.mockServer.Client()
+
 				url, err := GetSearchResults(client, searchURL)
 				if tc.expectedError != "" {
 					assert.Error(t, err)
@@ -198,6 +200,7 @@ func TestGetSearchResults(t *testing.T) {
 				}
 			} else {
 				client := &http.Client{}
+
 				url, err := GetSearchResults(client, tc.companyName)
 				if tc.expectedError != "" {
 					assert.Error(t, err)
@@ -270,6 +273,7 @@ func TestGetCompanyEmail(t *testing.T) {
 			if (err != nil) != tc.expectError {
 				t.Fatalf("expected error: %v, got: %v", tc.expectError, err)
 			}
+
 			if email != tc.wantEmail {
 				t.Errorf("expected email: %s, got: %s", tc.wantEmail, email)
 			}
