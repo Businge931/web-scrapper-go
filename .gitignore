@@ -1,5 +1,5 @@
 .env
-bin/*
+build/*
 companies-list/*
 output/*
 config.yaml
