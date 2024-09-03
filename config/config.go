@@ -14,8 +14,8 @@ func InitConfig() error {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
-
 	viper.SetDefault("serpapi.api_key", "")
+
 	err := viper.BindEnv("serpapi.api_key", "SERPAPI_KEY")
 	if err != nil {
 		log.Fatalf("error binding environment variable: %v", err)
