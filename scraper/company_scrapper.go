@@ -17,7 +17,6 @@ import (
 	"github.com/google/go-querystring/query"
 	"github.com/spf13/viper"
 
-
 	"github.com/Businge931/company-email-scraper/configs"
 )
 
@@ -26,6 +25,10 @@ type SerpAPIResponse struct {
 	Organic []struct {
 		Link string `json:"link"`
 	} `json:"organic"`
+}
+
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 var (
@@ -67,7 +70,7 @@ func ReadCompanyNames(filepath string) ([]string, error) {
 	return companyNames, nil
 }
 
-func GetSearchResults(client *http.Client, companyName string) (string, error) {
+func GetSearchResults(client HTTPClient, companyName string) (string, error) {
 	if err := configs.InitConfig(); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrInitConfig, err)
 	}
@@ -128,7 +131,7 @@ func buildSearchURL(companyName, apiKey string) (string, error) {
 	return fmt.Sprintf("%s?%s", baseURL, queryParams.Encode()), nil
 }
 
-func makeHTTPRequest(client *http.Client, url string) (*http.Response, error) {
+func makeHTTPRequest(client HTTPClient, url string) (*http.Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -151,7 +154,7 @@ func makeHTTPRequest(client *http.Client, url string) (*http.Response, error) {
 
 func decodeResponse(resp *http.Response) (SerpAPIResponse, error) {
 	var serpResponse SerpAPIResponse
-	
+
 	err := json.NewDecoder(resp.Body).Decode(&serpResponse)
 	if err != nil {
 		return serpResponse, fmt.Errorf("%w: %w", ErrDecodeFailed, err)
