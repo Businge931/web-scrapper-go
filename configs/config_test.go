@@ -80,7 +80,11 @@ func TestInitConfig(t *testing.T) {
 			// Simulate config file presence
 			if tc.fileExists {
 				viper.SetConfigType("yaml")
-				viper.ReadConfig(strings.NewReader(tc.fileContent))
+
+				err := viper.ReadConfig(strings.NewReader(tc.fileContent))
+				if err != nil {
+					t.Error("failed to simulate config file presence")
+				}
 			}
 
 			// Run the function
