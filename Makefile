@@ -2,6 +2,7 @@ APP = web-scrapper-go
 GOBASE = $(shell pwd)
 GOBIN = $(GOBASE)/build/bin
 LINT_PATH = $(GOBASE)/build/lint
+TEST_PATH = $(GOBASE)/scraper
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -23,3 +24,11 @@ lint-fix:
 install-golangci: ## Install the correct version of lint
     GOBIN=$(LINT_PATH) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.58.1
 	
+test-cover: ## Run tests with coverage
+	cd $(TEST_PATH) && go test -cover
+
+test-coverage: ## Run tests and generate coverage profile
+	cd $(TEST_PATH) && go test -coverprofile=coverage.out
+
+test-coverage-browser: ## Check the test coverage in the browser
+	cd $(TEST_PATH) && go tool cover -html=coverage.out -o /tmp/coverage.html && wslview /tmp/coverage.html
