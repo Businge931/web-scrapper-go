@@ -24,7 +24,6 @@ func InitConfig() error {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			log.Println("Config file not found; please set SERPAPI_KEY in environment or provide a config file.")
 		} else {
-
 			return fmt.Errorf("error reading config file: %w", err)
 		}
 	}

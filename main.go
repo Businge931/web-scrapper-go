@@ -1,8 +1,8 @@
 package main
 
 import (
-	"os"
 	"net/http"
+	"os"
 
 	log "github.com/sirupsen/logrus"
 
