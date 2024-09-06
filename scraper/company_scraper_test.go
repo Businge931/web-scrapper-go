@@ -1,17 +1,55 @@
 package scraper
 
 import (
-	"encoding/json"
+	// "bytes"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
-	"github.com/Businge931/company-email-scraper/config"
-	"github.com/google/go-querystring/query"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+var (
+	ErrUnexpectedType = errors.New("unexpected type for response")
+	ErrNetwork        = errors.New("network error")
+)
+
+// Mocking the HTTP client
+type MockClient struct {
+	mock.Mock
+}
+
+func (m *MockClient) Do(req *http.Request) (*http.Response, error) {
+	args := m.Called(req)
+
+	// Type assert and check for success
+	resp, ok := args.Get(0).(*http.Response)
+	if !ok {
+		return nil, ErrUnexpectedType
+	}
+
+	return resp, args.Error(1)
+}
+
+// Helper function to mock HTTP responses
+func mockHTTPResponse(statusCode int, body string) *http.Response {
+	// Create a new response body reader
+	bodyReader := strings.NewReader(body)
+
+	// Return a mock response
+	return &http.Response{
+		StatusCode: statusCode,
+		Body:       io.NopCloser(bodyReader), // Use io.NopCloser to simulate body closing
+		Header:     make(http.Header),
+	}
+}
 
 func TestReadCompanyNames(t *testing.T) {
 	tests := map[string]struct {
@@ -52,8 +90,8 @@ func TestReadCompanyNames(t *testing.T) {
 				defer file.Close()
 
 				// Write the company names to the file
-				for _, name := range tt.companyNames {
-					if _, err := file.WriteString(name + "\n"); err != nil {
+				for i := range tt.companyNames {
+					if _, err := file.WriteString(tt.companyNames[i] + "\n"); err != nil {
 						t.Fatalf("Failed to write to temp file: %v", err)
 					}
 				}
@@ -70,145 +108,110 @@ func TestReadCompanyNames(t *testing.T) {
 				if err == nil {
 					t.Fatalf("Expected an error, but got nil")
 				}
-				
+
 				return
-			} else {
-				if err != nil {
-					t.Fatalf("Did not expect an error, but got: %v", err)
-				}
+			} else if err != nil {
+				t.Fatalf("Did not expect an error, but got: %v", err)
 			}
 
 			// Check the length and content of slices
-			if len(actualNames) != len(tt.companyNames) {
-				t.Errorf("Expected %d company names, but got %d", len(tt.companyNames), len(actualNames))
-			}
-
-			for i, name := range tt.companyNames {
-				if actualNames[i] != name {
-					t.Errorf("Expected company name %q at index %d, but got %q", name, i, actualNames[i])
-				}
-			}
+			assertCompanyNames(t, actualNames, tt.companyNames)
 		})
 	}
 }
 
+func assertCompanyNames(t *testing.T, actualNames, expectedNames []string) {
+	if len(actualNames) != len(expectedNames) {
+		t.Errorf("Expected %d company names, but got %d", len(expectedNames), len(actualNames))
+	}
+
+	for i, name := range expectedNames {
+		if actualNames[i] != name {
+			t.Errorf("Expected company name %q at index %d, but got %q", name, i, actualNames[i])
+		}
+	}
+}
+
 func TestGetSearchResults(t *testing.T) {
-	tests := map[string]struct {
-		companyName   string
-		apiKey        string
-		mockServer    *httptest.Server
-		expectedError string
-		expectedURL   string
+	tests := []struct {
+		name           string
+		apiKey         string
+		companyName    string
+		mockResponse   *http.Response
+		mockError      error
+		expectedResult string
+		expectedError  error
 	}{
-		"Successful search with valid API key and company name": {
-			companyName: "testCompany",
-			apiKey:      "validApiKey",
-			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(SerpAPIResponse{
-					Organic: []struct {
-						Link string `json:"link"`
-					}{
-						{Link: "https://example.com"},
-					},
-				})
-			})),
-			expectedError: "",
-			expectedURL:   "https://example.com",
+		{
+			name:           "Successful search",
+			apiKey:         "valid_api_key",
+			companyName:    "TestCompany",
+			mockResponse:   mockHTTPResponse(http.StatusOK, `{"organic": [{"link": "https://facebook.com/testcompany"}]}`),
+			expectedResult: "https://facebook.com/testcompany",
+			expectedError:  nil,
 		},
-		"Failure due to missing or invalid API key": {
-			companyName:   "testCompany",
-			apiKey:        "",
-			mockServer:    nil,
-			expectedError: "SERPAPI_KEY not set in config or environment",
+		{
+			name:           "Missing API key",
+			apiKey:         "",
+			companyName:    "TestCompany",
+			expectedResult: "",
+			expectedError:  ErrAPIKeyNotSet,
 		},
-		"Failure due to the search API returning an error status": {
-			companyName: "testCompany",
-			apiKey:      "validApiKey",
-			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusInternalServerError)
-			})),
-			expectedError: "received non-OK HTTP status: 500 Internal Server Error",
+		{
+			name:           "Non-200 status code",
+			apiKey:         "valid_api_key",
+			companyName:    "TestCompany",
+			mockResponse:   mockHTTPResponse(http.StatusInternalServerError, ""),
+			expectedResult: "",
+			expectedError:  ErrNonOKStatus,
 		},
-		"Failure when no results are found for the given company name": {
-			companyName: "testCompany",
-			apiKey:      "validApiKey",
-			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(SerpAPIResponse{
-					Organic: []struct {
-						Link string `json:"link"`
-					}{},
-				})
-			})),
-			expectedError: "no results found for testCompany",
+		{
+			name:           "No search results",
+			apiKey:         "valid_api_key",
+			companyName:    "TestCompany",
+			mockResponse:   mockHTTPResponse(http.StatusOK, `{"organic": []}`),
+			expectedResult: "",
+			expectedError:  ErrNoResultsFound,
 		},
-		"Failure due to JSON decoding issues": {
-			companyName: "testCompany",
-			apiKey:      "validApiKey",
-			mockServer: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("invalid JSON"))
-			})),
-			expectedError: "failed to decode SerpAPI response: ",
-		},
-		"Failure due to issues with the InitConfig function": {
-			companyName:   "testCompany",
-			apiKey:        "validApiKey",
-			mockServer:    nil,
-			expectedError: "error initializing configuration: ",
+		{
+			name:           "Request failure",
+			apiKey:         "valid_api_key",
+			companyName:    "TestCompany",
+			mockError:      ErrNetwork,
+			expectedResult: "",
+			expectedError:  ErrRequestFailed,
 		},
 	}
 
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			// Set up environment variable
-			cleanup := config.SetupConfigFile(t, tc.apiKey)
-			defer cleanup()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Mock the config and environment
+			viper.Set("serpapi.api_key", tc.apiKey)
 
-			err := config.InitConfig()
-			if err != nil {
-				t.Fatalf("error initializing config: %v", err)
+			// Create a mock HTTP client
+			mockClient := new(MockClient)
+			if tc.mockResponse != nil || tc.mockError != nil {
+				mockClient.On("Do", mock.Anything).Return(tc.mockResponse, tc.mockError)
 			}
 
-			if tc.mockServer != nil {
-				defer tc.mockServer.Close()
-				baseURL := tc.mockServer.URL
-				params := struct {
-					Query  string `url:"q"`
-					APIKey string `url:"api_key"`
-					Num    int    `url:"num"`
-					Engine string `url:"engine"`
-				}{
-					Query:  tc.companyName,
-					APIKey: tc.apiKey,
-					Num:    1,
-					Engine: "google",
-				}
-				queryParams, _ := query.Values(params)
-				searchURL := fmt.Sprintf("%s?%s", baseURL, queryParams.Encode())
+			// Call GetSearchResults
+			result, err := GetSearchResults(mockClient, tc.companyName)
 
-				client := tc.mockServer.Client()
+			// Assert the result and error
+			assert.Equal(t, tc.expectedResult, result)
 
-				url, err := GetSearchResults(client, searchURL)
-				if tc.expectedError != "" {
-					assert.Error(t, err)
-					assert.Contains(t, err.Error(), tc.expectedError)
-				} else {
-					assert.NoError(t, err)
-					assert.Equal(t, tc.expectedURL, url)
-				}
+			if tc.expectedError != nil {
+				assert.ErrorIs(t, err, tc.expectedError)
 			} else {
-				client := &http.Client{}
+				assert.NoError(t, err)
+			}
 
-				url, err := GetSearchResults(client, tc.companyName)
-				if tc.expectedError != "" {
-					assert.Error(t, err)
-					assert.Contains(t, err.Error(), tc.expectedError)
-				} else {
-					assert.NoError(t, err)
-					assert.Equal(t, tc.expectedURL, url)
-				}
+			// Ensure the mock was called as expected
+			mockClient.AssertExpectations(t)
+
+			// Close the mock response body if it's not nil
+			if tc.mockResponse != nil && tc.mockResponse.Body != nil {
+				_ = tc.mockResponse.Body.Close()
 			}
 		})
 	}
@@ -260,9 +263,13 @@ func TestGetCompanyEmail(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Create a mock server
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tc.statusCode)
-				w.Write([]byte(tc.mockResponse))
+
+				_, err := w.Write([]byte(tc.mockResponse))
+				if err != nil {
+					t.Error("failed to write mock response")
+				}
 			}))
 			defer server.Close()
 
