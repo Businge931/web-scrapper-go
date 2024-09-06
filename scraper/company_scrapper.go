@@ -17,7 +17,8 @@ import (
 	"github.com/google/go-querystring/query"
 	"github.com/spf13/viper"
 
-	"github.com/Businge931/company-email-scraper/config"
+
+	"github.com/Businge931/company-email-scraper/configs"
 )
 
 // SerpAPI response struct visit: https://serper.dev/playground
@@ -67,7 +68,7 @@ func ReadCompanyNames(filepath string) ([]string, error) {
 }
 
 func GetSearchResults(client *http.Client, companyName string) (string, error) {
-	if err := config.InitConfig(); err != nil {
+	if err := configs.InitConfig(); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrInitConfig, err)
 	}
 
