@@ -1,9 +1,10 @@
 package main
 
 import (
-	"log"
 	"os"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/Businge931/company-email-scraper/scraper"
 )
