@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Businge931/company-email-scraper/models"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -56,15 +57,15 @@ func TestReadCompanyNames(t *testing.T) {
 		companyNames []string
 		expectError  bool
 	}{
-		"ValidCompanyNames": {
+		"success/ValidCompanyNames": {
 			companyNames: []string{"stanbic bank", "Pearl Technologies", "clinicpesa"},
 			expectError:  false,
 		},
-		"EmptyFile": {
+		"success/EmptyFile": {
 			companyNames: []string{},
 			expectError:  false,
 		},
-		"FileNotFound": {
+		"error/FileNotFound": {
 			expectError: true,
 		},
 	}
@@ -143,7 +144,7 @@ func TestGetSearchResults(t *testing.T) {
 		expectedError  error
 	}{
 		{
-			name:           "Successful search",
+			name:           "success/Successful search",
 			apiKey:         "valid_api_key",
 			companyName:    "TestCompany",
 			mockResponse:   mockHTTPResponse(http.StatusOK, `{"organic": [{"link": "https://facebook.com/testcompany"}]}`),
@@ -151,35 +152,35 @@ func TestGetSearchResults(t *testing.T) {
 			expectedError:  nil,
 		},
 		{
-			name:           "Missing API key",
+			name:           "error/Missing API key",
 			apiKey:         "",
 			companyName:    "TestCompany",
 			expectedResult: "",
-			expectedError:  ErrAPIKeyNotSet,
+			expectedError:  models.ErrAPIKeyNotSet,
 		},
 		{
-			name:           "Non-200 status code",
+			name:           "error/Non-200 status code",
 			apiKey:         "valid_api_key",
 			companyName:    "TestCompany",
 			mockResponse:   mockHTTPResponse(http.StatusInternalServerError, ""),
 			expectedResult: "",
-			expectedError:  ErrNonOKStatus,
+			expectedError:  models.ErrNonOKStatus,
 		},
 		{
-			name:           "No search results",
+			name:           "error/No search results",
 			apiKey:         "valid_api_key",
 			companyName:    "TestCompany",
 			mockResponse:   mockHTTPResponse(http.StatusOK, `{"organic": []}`),
 			expectedResult: "",
-			expectedError:  ErrNoResultsFound,
+			expectedError:  models.ErrNoResultsFound,
 		},
 		{
-			name:           "Request failure",
+			name:           "error/Request failure",
 			apiKey:         "valid_api_key",
 			companyName:    "TestCompany",
 			mockError:      ErrNetwork,
 			expectedResult: "",
-			expectedError:  ErrRequestFailed,
+			expectedError:  models.ErrRequestFailed,
 		},
 	}
 
@@ -192,6 +193,11 @@ func TestGetSearchResults(t *testing.T) {
 			mockClient := new(MockClient)
 			if tc.mockResponse != nil || tc.mockError != nil {
 				mockClient.On("Do", mock.Anything).Return(tc.mockResponse, tc.mockError)
+			}
+
+			// Ensure the response body is closed after the test
+			if tc.mockResponse != nil && tc.mockResponse.Body != nil {
+				defer tc.mockResponse.Body.Close()
 			}
 
 			// Call GetSearchResults
@@ -208,11 +214,6 @@ func TestGetSearchResults(t *testing.T) {
 
 			// Ensure the mock was called as expected
 			mockClient.AssertExpectations(t)
-
-			// Close the mock response body if it's not nil
-			if tc.mockResponse != nil && tc.mockResponse.Body != nil {
-				_ = tc.mockResponse.Body.Close()
-			}
 		})
 	}
 }
