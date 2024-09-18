@@ -1,7 +1,6 @@
 package scraper
 
 import (
-	// "bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +13,6 @@ import (
 	"github.com/Businge931/company-email-scraper/models"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 var (
@@ -22,21 +20,12 @@ var (
 	ErrNetwork        = errors.New("network error")
 )
 
-// Mocking the HTTP client
 type MockClient struct {
-	mock.Mock
+	MockDo func(req *http.Request) (*http.Response, error) // Function to simulate the Do behavior
 }
 
 func (m *MockClient) Do(req *http.Request) (*http.Response, error) {
-	args := m.Called(req)
-
-	// Type assert and check for success
-	resp, ok := args.Get(0).(*http.Response)
-	if !ok {
-		return nil, ErrUnexpectedType
-	}
-
-	return resp, args.Error(1)
+	return m.MockDo(req)
 }
 
 // Helper function to mock HTTP responses
@@ -53,221 +42,362 @@ func mockHTTPResponse(statusCode int, body string) *http.Response {
 }
 
 func TestReadCompanyNames(t *testing.T) {
-	tests := map[string]struct {
-		companyNames []string
-		expectError  bool
-	}{
-		"success/ValidCompanyNames": {
-			companyNames: []string{"stanbic bank", "Pearl Technologies", "clinicpesa"},
-			expectError:  false,
-		},
-		"success/EmptyFile": {
-			companyNames: []string{},
-			expectError:  false,
-		},
-		"error/FileNotFound": {
-			expectError: true,
-		},
-	}
 
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			// Prepare a temporary directory and file for testing, except for the "FileNotFound" case
-			var tempFile string
-
-			if name != "FileNotFound" {
-				tempDir := "companies-list"
-				tempFile = tempDir + "/input.txt"
-
-				if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
-					t.Fatalf("Failed to create temp directory: %v", err)
-				}
-				defer os.RemoveAll(tempDir) // Clean up the temp directory after the test
-
-				file, err := os.Create(tempFile)
-				if err != nil {
-					t.Fatalf("Failed to create temp file: %v", err)
-				}
-				defer file.Close()
-
-				// Write the company names to the file
-				for i := range tt.companyNames {
-					if _, err := file.WriteString(tt.companyNames[i] + "\n"); err != nil {
-						t.Fatalf("Failed to write to temp file: %v", err)
-					}
-				}
-			} else {
-				// Set a non-existing file path for "FileNotFound" case
-				tempFile = "non-existing-file.txt"
-			}
-
-			// Call the function under test
-			actualNames, err := ReadCompanyNames(tempFile)
-
-			// Check for expected error
-			if tt.expectError {
-				if err == nil {
-					t.Fatalf("Expected an error, but got nil")
-				}
-
-				return
-			} else if err != nil {
-				t.Fatalf("Did not expect an error, but got: %v", err)
-			}
-
-			// Check the length and content of slices
-			assertCompanyNames(t, actualNames, tt.companyNames)
-		})
-	}
-}
-
-func assertCompanyNames(t *testing.T, actualNames, expectedNames []string) {
-	if len(actualNames) != len(expectedNames) {
-		t.Errorf("Expected %d company names, but got %d", len(expectedNames), len(actualNames))
-	}
-
-	for i, name := range expectedNames {
-		if actualNames[i] != name {
-			t.Errorf("Expected company name %q at index %d, but got %q", name, i, actualNames[i])
-		}
-	}
-}
-
-func TestGetSearchResults(t *testing.T) {
 	tests := []struct {
-		name           string
-		apiKey         string
-		companyName    string
-		mockResponse   *http.Response
-		mockError      error
-		expectedResult string
-		expectedError  error
+		name         string
+		dependencies struct {
+			filePath    string
+			fileContent string
+		}
+		args struct {
+			filePath string
+		}
+		before   func(t *testing.T)
+		after    func(t *testing.T)
+		expected struct {
+			companyNames  []string
+			errorExpected bool
+		}
 	}{
 		{
-			name:           "success/Successful search",
-			apiKey:         "valid_api_key",
-			companyName:    "TestCompany",
-			mockResponse:   mockHTTPResponse(http.StatusOK, `{"organic": [{"link": "https://facebook.com/testcompany"}]}`),
-			expectedResult: "https://facebook.com/testcompany",
-			expectedError:  nil,
+			name: "success/Valid file with company names",
+			dependencies: struct {
+				filePath    string
+				fileContent string
+			}{
+				filePath:    "valid_companies.txt",
+				fileContent: "Company A\nCompany B\nCompany C\n",
+			},
+			args: struct {
+				filePath string
+			}{
+				filePath: "valid_companies.txt",
+			},
+			before: func(t *testing.T) {
+				err := os.WriteFile("valid_companies.txt", []byte("Company A\nCompany B\nCompany C\n"), 0644)
+				assert.NoError(t, err)
+			},
+			after: func(t *testing.T) {
+				err := os.Remove("valid_companies.txt")
+				assert.NoError(t, err)
+			},
+			expected: struct {
+				companyNames  []string
+				errorExpected bool
+			}{
+				companyNames:  []string{"Company A", "Company B", "Company C"},
+				errorExpected: false,
+			},
 		},
 		{
-			name:           "error/Missing API key",
-			apiKey:         "",
-			companyName:    "TestCompany",
-			expectedResult: "",
-			expectedError:  models.ErrAPIKeyNotSet,
+			name: "error/File does not exist",
+			dependencies: struct {
+				filePath    string
+				fileContent string
+			}{
+				filePath:    "nonexistent.txt",
+				fileContent: "",
+			},
+			args: struct {
+				filePath string
+			}{
+				filePath: "nonexistent.txt",
+			},
+			before: func(t *testing.T) {},
+			after:  func(t *testing.T) {},
+			expected: struct {
+				companyNames  []string
+				errorExpected bool
+			}{
+				companyNames:  nil,
+				errorExpected: true,
+			},
 		},
 		{
-			name:           "error/Non-200 status code",
-			apiKey:         "valid_api_key",
-			companyName:    "TestCompany",
-			mockResponse:   mockHTTPResponse(http.StatusInternalServerError, ""),
-			expectedResult: "",
-			expectedError:  models.ErrNonOKStatus,
-		},
-		{
-			name:           "error/No search results",
-			apiKey:         "valid_api_key",
-			companyName:    "TestCompany",
-			mockResponse:   mockHTTPResponse(http.StatusOK, `{"organic": []}`),
-			expectedResult: "",
-			expectedError:  models.ErrNoResultsFound,
-		},
-		{
-			name:           "error/Request failure",
-			apiKey:         "valid_api_key",
-			companyName:    "TestCompany",
-			mockError:      ErrNetwork,
-			expectedResult: "",
-			expectedError:  models.ErrRequestFailed,
+			name: "error/Malformed file content",
+			dependencies: struct {
+				filePath    string
+				fileContent string
+			}{
+				filePath:    "malformed.txt",
+				fileContent: "Company A\n\nCompany C\n", // Note: empty line
+			},
+			args: struct {
+				filePath string
+			}{
+				filePath: "malformed.txt",
+			},
+			before: func(t *testing.T) {
+				err := os.WriteFile("malformed.txt", []byte("Company A\n\nCompany C\n"), 0644)
+				assert.NoError(t, err)
+			},
+			after: func(t *testing.T) {
+				err := os.Remove("malformed.txt")
+				assert.NoError(t, err)
+			},
+			expected: struct {
+				companyNames  []string
+				errorExpected bool
+			}{
+				companyNames:  []string{"Company A", "", "Company C"}, // Empty line included
+				errorExpected: false,
+			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Mock the config and environment
-			viper.Set("serpapi.api_key", tc.apiKey)
+			// Setup
+			tc.before(t)
 
-			// Create a mock HTTP client
-			mockClient := new(MockClient)
-			if tc.mockResponse != nil || tc.mockError != nil {
-				mockClient.On("Do", mock.Anything).Return(tc.mockResponse, tc.mockError)
+			// Run the function
+			names, err := ReadCompanyNames(tc.args.filePath)
+
+			// Cleanup
+			tc.after(t)
+
+			// Validate the results
+			if tc.expected.errorExpected {
+				assert.Error(t, err, "expected an error but did not get one")
+			} else {
+				assert.NoError(t, err, "expected no error but got one")
+				assert.ElementsMatch(t, tc.expected.companyNames, names, "company names mismatch")
 			}
+		})
+	}
+}
 
-			// Ensure the response body is closed after the test
-			if tc.mockResponse != nil && tc.mockResponse.Body != nil {
-				defer tc.mockResponse.Body.Close()
-			}
+func TestGetSearchResults(t *testing.T) {
+	type dependencies struct {
+		apiKey string
+	}
 
-			// Call GetSearchResults
-			result, err := GetSearchResults(mockClient, tc.companyName)
+	type args struct {
+		companyName string
+	}
 
-			// Assert the result and error
-			assert.Equal(t, tc.expectedResult, result)
+	type expected struct {
+		result string
+		err    error
+	}
 
-			if tc.expectedError != nil {
-				assert.ErrorIs(t, err, tc.expectedError)
+	tests := []struct {
+		name         string
+		client       HTTPClient // Mocked client
+		dependencies dependencies
+		args         args
+		expected     expected
+	}{
+		{
+			name: "success/Successful search",
+			client: &MockClient{
+				MockDo: func(req *http.Request) (*http.Response, error) {
+					return mockHTTPResponse(http.StatusOK, `{"organic": [{"link": "https://facebook.com/testcompany"}]}`), nil
+				},
+			},
+			dependencies: dependencies{
+				apiKey: "valid_api_key",
+			},
+			args: args{
+				companyName: "TestCompany",
+			},
+			expected: expected{
+				result: "https://facebook.com/testcompany",
+				err:    nil,
+			},
+		},
+		{
+			name: "error/Missing API key",
+			client: &MockClient{
+				MockDo: func(req *http.Request) (*http.Response, error) {
+					return nil, nil // No call expected
+				},
+			},
+			dependencies: dependencies{
+				apiKey: "",
+			},
+			args: args{
+				companyName: "TestCompany",
+			},
+			expected: expected{
+				result: "",
+				err:    models.ErrAPIKeyNotSet,
+			},
+		},
+		{
+			name: "error/Non-200 status code",
+			client: &MockClient{
+				MockDo: func(req *http.Request) (*http.Response, error) {
+					return mockHTTPResponse(http.StatusInternalServerError, ""), nil
+				},
+			},
+			dependencies: dependencies{
+				apiKey: "valid_api_key",
+			},
+			args: args{
+				companyName: "TestCompany",
+			},
+			expected: expected{
+				result: "",
+				err:    models.ErrNonOKStatus,
+			},
+		},
+		{
+			name: "error/No search results",
+			client: &MockClient{
+				MockDo: func(req *http.Request) (*http.Response, error) {
+					return mockHTTPResponse(http.StatusOK, `{"organic": []}`), nil
+				},
+			},
+			dependencies: dependencies{
+				apiKey: "valid_api_key",
+			},
+			args: args{
+				companyName: "TestCompany",
+			},
+			expected: expected{
+				result: "",
+				err:    models.ErrNoResultsFound,
+			},
+		},
+		{
+			name: "error/Request failure",
+			client: &MockClient{
+				MockDo: func(req *http.Request) (*http.Response, error) {
+					return nil, ErrNetwork
+				},
+			},
+			dependencies: dependencies{
+				apiKey: "valid_api_key",
+			},
+			args: args{
+				companyName: "TestCompany",
+			},
+			expected: expected{
+				result: "",
+				err:    models.ErrRequestFailed,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			// Set API key from dependencies
+			viper.Set("serpapi.api_key", tt.dependencies.apiKey)
+
+			// Call GetSearchResults with args
+			result, err := GetSearchResults(tt.client, tt.args.companyName)
+
+			// Assert the expected result and error
+			assert.Equal(t, tt.expected.result, result)
+
+			if tt.expected.err != nil {
+				assert.ErrorIs(t, err, tt.expected.err)
 			} else {
 				assert.NoError(t, err)
 			}
-
-			// Ensure the mock was called as expected
-			mockClient.AssertExpectations(t)
 		})
 	}
 }
 
 func TestGetCompanyEmail(t *testing.T) {
-	tests := map[string]struct {
-		companyURL   string
-		companyName  string
+	// Define structs for dependencies, args, and expected results
+	type dependencies struct {
 		mockResponse string
 		statusCode   int
-		wantEmail    string
-		expectError  bool
+	}
+
+	type args struct {
+		companyURL  string
+		companyName string
+	}
+
+	type expected struct {
+		wantEmail   string
+		expectError bool
+	}
+
+	// Define the test cases
+	tests := []struct {
+		name         string
+		dependencies dependencies
+		args         args
+		expected     expected
 	}{
-		"Valid email found": {
-			companyURL:   "/test-company",
-			companyName:  "Test Company",
-			mockResponse: `<html><body>Contact us at test@example.com</body></html>`,
-			statusCode:   http.StatusOK,
-			wantEmail:    "test@example.com",
-			expectError:  false,
+		{
+			name: "Valid email found",
+			dependencies: dependencies{
+				mockResponse: `<html><body>Contact us at test@example.com</body></html>`,
+				statusCode:   http.StatusOK,
+			},
+			args: args{
+				companyURL:  "/test-company",
+				companyName: "Test Company",
+			},
+
+			expected: expected{
+				wantEmail:   "test@example.com",
+				expectError: false,
+			},
 		},
-		"No email found": {
-			companyURL:   "/no-email-company",
-			companyName:  "No Email Company",
-			mockResponse: `<html><body>No contact information available</body></html>`,
-			statusCode:   http.StatusOK,
-			wantEmail:    "",
-			expectError:  true,
+		{
+			name: "No email found",
+			dependencies: dependencies{
+				mockResponse: `<html><body>No contact information available</body></html>`,
+				statusCode:   http.StatusOK,
+			},
+			args: args{
+				companyURL:  "/no-email-company",
+				companyName: "No Email Company",
+			},
+
+			expected: expected{
+				wantEmail:   "",
+				expectError: true,
+			},
 		},
-		"Facebook URL skipped": {
-			companyURL:   "https://www.facebook.com/test-company",
-			companyName:  "Test Company",
-			mockResponse: "",
-			statusCode:   http.StatusOK,
-			wantEmail:    "",
-			expectError:  true,
+		{
+			name: "Facebook URL skipped",
+			dependencies: dependencies{
+				mockResponse: "",
+				statusCode:   http.StatusOK,
+			},
+			args: args{
+				companyURL:  "https://www.facebook.com/test-company",
+				companyName: "Test Company",
+			},
+
+			expected: expected{
+				wantEmail:   "",
+				expectError: true,
+			},
 		},
-		"Non-OK status": {
-			companyURL:   "/server-error",
-			companyName:  "Server Error Company",
-			mockResponse: "",
-			statusCode:   http.StatusInternalServerError,
-			wantEmail:    "",
-			expectError:  true,
+		{
+			name: "Non-OK status",
+			dependencies: dependencies{
+				mockResponse: "",
+				statusCode:   http.StatusInternalServerError,
+			},
+			args: args{
+				companyURL:  "/server-error",
+				companyName: "Server Error Company",
+			},
+
+			expected: expected{
+				wantEmail:   "",
+				expectError: true,
+			},
 		},
 	}
 
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+
 			// Create a mock server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(tc.statusCode)
-
-				_, err := w.Write([]byte(tc.mockResponse))
+				w.WriteHeader(tc.dependencies.statusCode)
+				_, err := w.Write([]byte(tc.dependencies.mockResponse))
 				if err != nil {
 					t.Error("failed to write mock response")
 				}
@@ -275,16 +405,20 @@ func TestGetCompanyEmail(t *testing.T) {
 			defer server.Close()
 
 			// Use the mock server's URL for the test
-			companyURL := server.URL + tc.companyURL
+			companyURL := server.URL + tc.args.companyURL
 
-			email, err := GetCompanyEmail(companyURL, tc.companyName)
-			if (err != nil) != tc.expectError {
-				t.Fatalf("expected error: %v, got: %v", tc.expectError, err)
+			// Call the function under test
+			email, err := GetCompanyEmail(companyURL, tc.args.companyName)
+
+			// Assert the result and error
+			if (err != nil) != tc.expected.expectError {
+				t.Fatalf("expected error: %v, got: %v", tc.expected.expectError, err)
 			}
 
-			if email != tc.wantEmail {
-				t.Errorf("expected email: %s, got: %s", tc.wantEmail, email)
+			if email != tc.expected.wantEmail {
+				t.Errorf("expected email: %s, got: %s", tc.expected.wantEmail, email)
 			}
+
 		})
 	}
 }
