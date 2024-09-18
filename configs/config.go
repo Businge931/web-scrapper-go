@@ -11,7 +11,6 @@ import (
 type BindEnvFunc func(key string, env string) error
 
 func InitConfig(
-	// bindEnv BindEnvFunc
 	) error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")

@@ -31,7 +31,6 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-
 func ReadCompanyNames(filepath string) ([]string, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -55,7 +54,7 @@ func ReadCompanyNames(filepath string) ([]string, error) {
 
 func GetSearchResults(client HTTPClient, companyName string) (string, error) {
 	if err := configs.InitConfig(); err != nil {
-		return "", fmt.Errorf("%w: %w",models.ErrInitConfig, err)
+		return "", fmt.Errorf("%w: %w", models.ErrInitConfig, err)
 	}
 
 	apiKey, err := getAPIKey()

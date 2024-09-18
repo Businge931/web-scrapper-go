@@ -20,7 +20,7 @@ var (
 	ErrWriteFileFailed     = errors.New("failed to write to file")
 
 	//
-	ErrBindingEnvVariable= errors.New("error binding environment variable")
+	ErrBindingEnvVariable = errors.New("error binding environment variable")
 
 	//
 	ErrUnexpectedType = errors.New("unexpected type for response")
