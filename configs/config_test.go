@@ -106,6 +106,7 @@ func TestInitConfig(t *testing.T) {
 				expectedKey:   "", // Default fallback should be empty
 			},
 		},
+		
 	}
 
 	for _, tc := range tests {

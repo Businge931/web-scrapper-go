@@ -7,7 +7,12 @@ import (
 	"github.com/spf13/viper"
 )
 
-func InitConfig() error {
+// Define a function type to bind environment variables
+type BindEnvFunc func(key string, env string) error
+
+func InitConfig(
+	// bindEnv BindEnvFunc
+	) error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -16,7 +21,7 @@ func InitConfig() error {
 
 	err := viper.BindEnv("serpapi.api_key", "SERPAPI_KEY")
 	if err != nil {
-		log.Fatalf("error binding environment variable: %v", err)
+		log.Fatal("error binding environment variable")
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
