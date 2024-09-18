@@ -10,8 +10,7 @@ import (
 // Define a function type to bind environment variables
 type BindEnvFunc func(key string, env string) error
 
-func InitConfig(
-	) error {
+func InitConfig() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
