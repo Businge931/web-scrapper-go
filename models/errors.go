@@ -18,4 +18,12 @@ var (
 	ErrNoEmailFound        = errors.New("no email found on the page")
 	ErrInvalidCompanyURL   = errors.New("invalid company URL")
 	ErrWriteFileFailed     = errors.New("failed to write to file")
+
+	//
+	ErrBindingEnvVariable= errors.New("error binding environment variable")
+
+	//
+	ErrUnexpectedType = errors.New("unexpected type for response")
+	ErrNetwork        = errors.New("network error")
+	ErrMockNoCall     = errors.New("mock: no call expected")
 )
