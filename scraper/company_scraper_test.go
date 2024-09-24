@@ -35,6 +35,7 @@ func mockHTTPResponse(statusCode int, body string) *http.Response {
 		Header:     make(http.Header),
 	}
 }
+
 func TestReadCompanyNames(t *testing.T) {
 	tests := []struct {
 		name         string
