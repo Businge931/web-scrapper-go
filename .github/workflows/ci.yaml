@@ -49,6 +49,11 @@ jobs:
       - name: Install dependencies
         run: make deps
 
+      - name: Run all tests
+        run: |
+          make tests-scraper
+          make tests-config
+
       - name: Run tests with coverage
         run: make test-coverage
 
