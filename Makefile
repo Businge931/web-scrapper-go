@@ -3,6 +3,7 @@ GOBASE = $(shell pwd)
 GOBIN = $(GOBASE)/build/bin
 LINT_PATH = $(GOBASE)/build/lint
 TEST_PATH = $(GOBASE)/scraper
+TEST_PATH_CONFIG = $(GOBASE)/configs
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -23,7 +24,13 @@ lint-fix:
 
 install-golangci: ## Install the correct version of lint
     GOBIN=$(LINT_PATH) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.58.1
-	
+
+tests-scraper: ## Run tests in the scraper folder
+	cd $(TEST_PATH) && go test .
+
+tests-config: ## Run test in the config folder
+	cd $(TEST_PATH_CONFIG) && go test .
+
 test-cover: ## Run tests with coverage
 	cd $(TEST_PATH) && go test -cover
 
