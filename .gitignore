@@ -1,0 +1,6 @@
+.env
+build/*
+companies-list/*
+output/*
+config.yaml
+scraper/coverage.out
