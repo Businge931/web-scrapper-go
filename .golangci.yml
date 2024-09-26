@@ -16,6 +16,8 @@ linters:
     - thelper
     - testpackage
     - wrapcheck
+    # DEPRECATED
+    - execinquery
 
 linters-settings:
   cyclop:
