@@ -8,7 +8,7 @@ import (
 )
 
 // Define a function type to bind environment variables
-type BindEnvFunc func(key string, env string) error
+type BindEnvFunc func(key, env string) error
 
 func InitConfig() error {
 	viper.SetConfigName("config")

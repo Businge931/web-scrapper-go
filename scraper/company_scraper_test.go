@@ -68,7 +68,7 @@ func TestReadCompanyNames(t *testing.T) {
 				filePath: "valid_companies.txt",
 			},
 			before: func(t *testing.T) {
-				err := os.WriteFile("valid_companies.txt", []byte("Company A\nCompany B\nCompany C\n"), 0644)
+				err := os.WriteFile("valid_companies.txt", []byte("Company A\nCompany B\nCompany C\n"), 0o600)
 				assert.NoError(t, err)
 			},
 			after: func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestReadCompanyNames(t *testing.T) {
 				filePath: "malformed.txt",
 			},
 			before: func(t *testing.T) {
-				err := os.WriteFile("malformed.txt", []byte("Company A\n\nCompany C\n"), 0644)
+				err := os.WriteFile("malformed.txt", []byte("Company A\n\nCompany C\n"), 0o600)
 				assert.NoError(t, err)
 			},
 			after: func(t *testing.T) {
@@ -414,6 +414,7 @@ func TestGetCompanyEmail(t *testing.T) {
 		})
 	}
 }
+
 func TestWriteEmailsToFile(t *testing.T) {
 	tests := map[string]struct {
 		companyName string
